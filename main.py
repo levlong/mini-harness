@@ -19,6 +19,10 @@ def show(kind: str, data: dict):
         preview = data["result"][:300] + ("…" if len(data["result"]) > 300 else "")
         style = "red" if data["result"].startswith("ERROR") else "dim"
         console.print(f"   [{style}]{preview}[/]")
+    elif kind == "loop_warning":
+        console.print(f"[yellow]Warned model: {data['name']} repeated x{data['count']}[/]")
+    elif kind == "loop_detected":
+        console.print(f"[yellow]Loop detected: {data['name']} x{data['count']}[/]")
     elif kind == "max_steps":
         console.print("[yellow]Hit MAX_STEPS[/]")
 
@@ -35,7 +39,9 @@ def main():
         show(kind, data)
 
     try:
-        answer = run_agent(task, llm, default_registry(s.workspace), s.max_steps, on_event)
+        answer = run_agent(
+            task, llm, default_registry(s.workspace), s.max_steps, on_event, s.loop_limit
+        )
     except Exception as e:  # e.g. retries exhausted on 429: keep the evidence
         log("error", {"type": type(e).__name__, "message": str(e)})
         raise

@@ -47,7 +47,7 @@ uv run pytest                # tests use a fake LLM, no network
 - `config.py` — settings from `.env`
 - `llm.py` — thin client: chat call + retry with exponential backoff on 429 / connection errors
 - `tools/` — registry + `files.py` (read/write/list, sandboxed to WORKSPACE) and `shell.py` (whitelisted commands, no shell=True)
-- `agent.py` — the loop: call model → run tool calls → append results → repeat until no tool calls or `MAX_STEPS`
+- `agent.py` — the loop: call model → run tool calls → append results → repeat until no tool calls, `MAX_STEPS`, or a loop (same tool+args+result `LOOP_LIMIT` times)
 - `runlog.py` — `on_event` sink that appends every event to `runs/<timestamp>.jsonl` (messages, tool calls, latency, tokens)
 - `main.py` — CLI with rich output; prints the log path + total tokens at the end
 - `tests/` — loop tests with a scripted fake LLM
@@ -56,7 +56,7 @@ uv run pytest                # tests use a fake LLM, no network
 
 1. [x] Get a real run working against Gemini Flash.
 2. [x] Log every turn to `runs/*.jsonl` (messages, tool calls, latency, tokens).
-3. [ ] Loop detection: stop if the same tool+args repeats N times.
+3. [x] Loop detection: stop if the same tool+args repeats N times.
 4. [ ] Feed tool/JSON errors back to the model so it self-corrects.
 5. [ ] Provider failover (Gemini → OpenRouter/Groq) on repeated 429.
 6. [ ] Context management: truncate/summarize old tool results.

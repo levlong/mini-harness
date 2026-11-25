@@ -30,7 +30,7 @@ class RunLog:
             "kind": kind,
             **data,
         }
-        if kind in ("final", "max_steps", "error"):
+        if kind in ("final", "max_steps", "loop_detected", "error"):
             record["total_usage"] = self.totals
         # Open/append/close per event: a crash mid-run still leaves a readable log
         with self.path.open("a", encoding="utf-8") as f:

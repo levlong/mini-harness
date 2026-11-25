@@ -74,7 +74,11 @@ def test_stops_at_max_steps(tmp_path):
         for i in range(3)
     ]
     answer = run_agent(
-        "loop forever", FakeLLM(loop), default_registry(tmp_path), max_steps=3
+        "loop forever",
+        FakeLLM(loop),
+        default_registry(tmp_path),
+        max_steps=3,
+        loop_limit=99,
     )
     assert answer.startswith("Stopped after 3 steps")
 
@@ -124,3 +128,54 @@ def test_run_log_writes_jsonl(tmp_path):
     assert records[2]["latency_s"] >= 0 and records[2]["usage"]["total_tokens"] == 15
     assert records[4]["result"] == "hi" and records[4]["id"] == "c1"
     assert records[-1]["total_usage"]["total_tokens"] == 30
+
+
+def test_loop_detected_on_repeated_call(tmp_path):
+    # same tool + same args (key order differs) + same result, 3 times -> stop
+    args = ['{"path": "."}', '{"path":"."}', '{ "path" : "." }']
+    script = [
+        NS(content=None, tool_calls=[NS(id=f"c{i}", function=NS(name="list_dir", arguments=a))])
+        for i, a in enumerate(args)
+    ]
+    events = []
+    answer = run_agent(
+        "list",
+        FakeLLM(script),
+        default_registry(tmp_path),
+        on_event=lambda k, d: events.append(k),
+        loop_limit=3,
+    )
+    assert answer.startswith("Stopped: list_dir") and "loop detected" in answer
+    assert events.count("loop_warning") == 1 and events[-1] == "loop_detected"
+
+
+def test_same_call_with_new_result_is_not_a_loop(tmp_path):
+    # re-reading a file that changed between reads is progress, not a loop
+    f = tmp_path / "a.txt"
+    reads = [NS(content=None, tool_calls=[tool_call(f"c{i}", "read_file", {"path": "a.txt"})]) for i in range(3)]
+
+    class ChangingFile(FakeLLM):
+        def chat(self, messages, tools=None):
+            f.write_text(f"version {len(self.calls)}")
+            return super().chat(messages, tools)
+
+    llm = ChangingFile(reads + [NS(content="done", tool_calls=None)])
+    assert run_agent("watch a.txt", llm, default_registry(tmp_path), loop_limit=3) == "done"
+
+
+def test_call_key_normalizes_arg_order():
+    from agent import call_key
+
+    assert call_key("t", '{"a":1,"b":2}', "r") == call_key("t", '{"b": 2, "a": 1}', "r")
+    assert call_key("t", "{bad json", "r") == ("t", "{bad json", "r")
+
+
+def test_loop_warning_lets_model_recover(tmp_path):
+    # 2nd identical call gets a warning appended; the model listens and answers
+    ls = [NS(content=None, tool_calls=[tool_call(f"c{i}", "list_dir", {"path": "."})]) for i in range(2)]
+    llm = FakeLLM(ls + [NS(content="it is empty", tool_calls=None)])
+    answer = run_agent("list", llm, default_registry(tmp_path), loop_limit=3)
+    assert answer == "it is empty"
+    first, second = llm.calls[1][-1]["content"], llm.calls[2][-1]["content"]
+    assert "WARNING" not in first
+    assert second.startswith("(empty)") and "WARNING" in second

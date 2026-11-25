@@ -13,6 +13,7 @@ class Settings:
     base_url: str
     model: str
     max_steps: int
+    loop_limit: int
     workspace: Path
 
 
@@ -28,5 +29,6 @@ def load_settings() -> Settings:
         ),
         model=model,
         max_steps=int(os.getenv("MAX_STEPS", "15")),
+        loop_limit=int(os.getenv("LOOP_LIMIT", "3")),
         workspace=Path(os.getenv("WORKSPACE", ".")).resolve(),
     )
