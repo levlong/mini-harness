@@ -57,7 +57,7 @@ def test_tool_error_goes_back_to_model(tmp_path):
 def test_unknown_tool_and_bad_args(tmp_path):
     reg = default_registry(tmp_path)
     assert reg.run("nope", "{}").startswith("ERROR: unknown tool")
-    assert reg.run("read_file", "{not json").startswith("ERROR: invalid arguments")
+    assert reg.run("read_file", "{not json").startswith("ERROR: arguments for read_file are not valid JSON")
 
 
 def test_shell_whitelist(tmp_path):
@@ -179,3 +179,41 @@ def test_loop_warning_lets_model_recover(tmp_path):
     first, second = llm.calls[1][-1]["content"], llm.calls[2][-1]["content"]
     assert "WARNING" not in first
     assert second.startswith("(empty)") and "WARNING" in second
+
+
+def test_arg_errors_are_short_and_actionable(tmp_path):
+    reg = default_registry(tmp_path)
+    usage = 'Expected JSON object: {"path": string (required)}'
+
+    # valid JSON but not an object used to crash the whole run
+    for raw in ('["README.md"]', "null"):
+        out = reg.run("read_file", raw)
+        assert out.startswith("ERROR: arguments for read_file must be a JSON object") and usage in out
+
+    typo = reg.run("read_file", '{"pth": "x"}')
+    assert "unknown argument 'pth'" in typo and "'path': Field required" in typo and usage in typo
+
+    wrong_type = reg.run("read_file", '{"path": 123}')
+    assert "'path': Input should be a valid string" in wrong_type
+    assert "pydantic.dev" not in wrong_type and "PathArgs" not in wrong_type
+
+
+def test_missing_file_error_uses_relative_path(tmp_path):
+    out = default_registry(tmp_path).run("read_file", '{"path": "nope.txt"}')
+    assert out == "ERROR: FileNotFoundError: 'nope.txt' does not exist. Use list_dir to see what is there"
+
+
+def test_model_self_corrects_after_bad_args(tmp_path):
+    (tmp_path / "a.txt").write_text("hi")
+    llm = FakeLLM(
+        [
+            NS(content=None, tool_calls=[tool_call("c1", "read_file", {"pth": "a.txt"})]),
+            NS(content=None, tool_calls=[tool_call("c2", "read_file", {"path": "a.txt"})]),
+            NS(content="it says hi", tool_calls=None),
+        ]
+    )
+    events = []
+    answer = run_agent("read a.txt", llm, default_registry(tmp_path), on_event=lambda k, d: events.append((k, d)))
+    assert answer == "it says hi"
+    assert [d["error"] for k, d in events if k == "tool_result"] == [True, False]
+    assert "unknown argument 'pth'" in llm.calls[1][-1]["content"]  # model saw the hint

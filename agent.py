@@ -115,6 +115,7 @@ def run_agent(
                     "id": tc.id,
                     "name": tc.function.name,
                     "result": result,
+                    "error": result.startswith("ERROR"),  # for counting self-corrections
                     "latency_s": round(time.perf_counter() - t0, 3),
                 },
             )

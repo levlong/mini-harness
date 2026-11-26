@@ -57,7 +57,7 @@ uv run pytest                # tests use a fake LLM, no network
 1. [x] Get a real run working against Gemini Flash.
 2. [x] Log every turn to `runs/*.jsonl` (messages, tool calls, latency, tokens).
 3. [x] Loop detection: stop if the same tool+args repeats N times.
-4. [ ] Feed tool/JSON errors back to the model so it self-corrects.
+4. [x] Feed tool/JSON errors back to the model so it self-corrects.
 5. [ ] Provider failover (Gemini → OpenRouter/Groq) on repeated 429.
 6. [ ] Context management: truncate/summarize old tool results.
 7. [ ] `spawn_agent` tool = subagent with a fresh context, returns a summary only.
